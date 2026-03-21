@@ -451,16 +451,16 @@ class MainActivity : OrientationAwareActivity() {
                 checkBatteryOptimizationAndProceed()
             }
             LocationStatus.DISABLED -> {
-                // Show location enable screen (should have permissions as existing user)
-                Log.d("MainActivity", "Location services disabled, showing enable screen")
-                mainViewModel.updateOnboardingState(OnboardingState.LOCATION_CHECK)
-                mainViewModel.updateLocationLoading(false)
+                // BITCHAT MOD: Location is now optional for message flow
+                // It's only strictly required for Bluetooth scanning on Android
+                // We'll proceed to battery optimization check even if location is disabled
+                Log.d("MainActivity", "Location services disabled, but proceeding anyway as it's optional for main flow")
+                checkBatteryOptimizationAndProceed()
             }
             LocationStatus.NOT_AVAILABLE -> {
-                // Device doesn't support location services (very unusual)
-                Log.e("MainActivity", "Location services not available")
-                mainViewModel.updateOnboardingState(OnboardingState.LOCATION_CHECK)
-                mainViewModel.updateLocationLoading(false)
+                // BITCHAT MOD: Location is now optional
+                Log.e("MainActivity", "Location services not available, but proceeding anyway")
+                checkBatteryOptimizationAndProceed()
             }
         }
     }
@@ -482,18 +482,9 @@ class MainActivity : OrientationAwareActivity() {
         Log.w("MainActivity", "Location services disabled or failed: $message")
         mainViewModel.updateLocationLoading(false)
         mainViewModel.updateLocationStatus(locationStatusManager.checkLocationStatus())
-
-        when {
-            mainViewModel.locationStatus.value == LocationStatus.NOT_AVAILABLE -> {
-                // Show permanent error for devices without location services
-                mainViewModel.updateErrorMessage(message)
-                mainViewModel.updateOnboardingState(OnboardingState.ERROR)
-            }
-            else -> {
-                // Stay on location check screen for retry
-                mainViewModel.updateOnboardingState(OnboardingState.LOCATION_CHECK)
-            }
-        }
+        
+        // BITCHAT MOD: Location is now optional
+        checkBatteryOptimizationAndProceed()
     }
     
     /**
@@ -533,7 +524,6 @@ class MainActivity : OrientationAwareActivity() {
         
         // After permissions are granted, re-check Bluetooth, Location, and Battery Optimization status
         val currentBluetoothStatus = bluetoothStatusManager.checkBluetoothStatus()
-        val currentLocationStatus = locationStatusManager.checkLocationStatus()
         val currentBatteryOptimizationStatus = when {
             !batteryOptimizationManager.isBatteryOptimizationSupported() -> BatteryOptimizationStatus.NOT_SUPPORTED
             batteryOptimizationManager.isBatteryOptimizationDisabled() -> BatteryOptimizationStatus.DISABLED
@@ -548,13 +538,8 @@ class MainActivity : OrientationAwareActivity() {
                 mainViewModel.updateOnboardingState(OnboardingState.BLUETOOTH_CHECK)
                 mainViewModel.updateBluetoothLoading(false)
             }
-            currentLocationStatus != LocationStatus.ENABLED -> {
-                // Location services still disabled, but now we have permissions to enable it
-                Log.d("MainActivity", "Permissions granted, but Location services still disabled. Showing Location enable screen.")
-                mainViewModel.updateLocationStatus(currentLocationStatus)
-                mainViewModel.updateOnboardingState(OnboardingState.LOCATION_CHECK)
-                mainViewModel.updateLocationLoading(false)
-            }
+            // BITCHAT MOD: Removed Location status check here. 
+            // Location is now optional for the main message flow.
             currentBatteryOptimizationStatus == BatteryOptimizationStatus.ENABLED -> {
                 // Battery optimization still enabled, show battery optimization screen
                 android.util.Log.d("MainActivity", "Permissions granted, but battery optimization still enabled. Showing battery optimization screen.")
@@ -563,8 +548,8 @@ class MainActivity : OrientationAwareActivity() {
                 mainViewModel.updateBatteryOptimizationLoading(false)
             }
             else -> {
-                // Both are enabled, proceed to app initialization
-                Log.d("MainActivity", "Both Bluetooth and Location services are enabled, proceeding to initialization")
+                // Bluetooth and Battery Optimization (if applicable) are handled, proceed to app initialization
+                Log.d("MainActivity", "Proceeding to initialization")
                 mainViewModel.updateOnboardingState(OnboardingState.INITIALIZING)
                 initializeApp()
             }
@@ -667,7 +652,7 @@ class MainActivity : OrientationAwareActivity() {
                 com.bitchat.android.nostr.LocationNotesInitializer.initialize(this@MainActivity)
                 
                 // Ensure all permissions are still granted (user might have revoked in settings)
-                if (!permissionManager.areAllPermissionsGranted()) {
+                if (!permissionManager.areRequiredPermissionsGranted()) {
                     val missing = permissionManager.getMissingPermissions()
                     Log.w("MainActivity", "Permissions revoked during initialization: $missing")
                     handleOnboardingFailed("Some permissions were revoked. Please grant all permissions to continue.")
@@ -732,14 +717,8 @@ class MainActivity : OrientationAwareActivity() {
                 return
             }
             
-            // Check if location services were disabled while app was backgrounded
-            val currentLocationStatus = locationStatusManager.checkLocationStatus()
-            if (currentLocationStatus != LocationStatus.ENABLED) {
-                Log.w("MainActivity", "Location services disabled while app was backgrounded")
-                mainViewModel.updateLocationStatus(currentLocationStatus)
-                mainViewModel.updateOnboardingState(OnboardingState.LOCATION_CHECK)
-                mainViewModel.updateLocationLoading(false)
-            }
+            // BITCHAT MOD: Location check on resume is now removed
+            // App should continue to work even if location is off
         }
     }
     
